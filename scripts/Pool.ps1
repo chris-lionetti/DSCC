@@ -1,4 +1,4 @@
-function Get-DSCCStoragePool
+function Get-DSCCPool
 {
 <#
 .SYNOPSIS
@@ -7,7 +7,7 @@ function Get-DSCCStoragePool
     Returns the HPE DSSC DOM Storage Systems Pools for a specific storage system and pool 
 .PARAMETER StorageSystemID
     A single Storage System ID is specified and required, the pools defined will be returned unless a specific PoolID is requested.
-.PARAMETER StoragePoolID
+.PARAMETER PoolID
     If a single Storage System Pool ID is specified, only that pools will be returned.
 .PARAMETER WhatIf
     The WhatIf directive will show you the RAW RestAPI call that would be made to DSCC instead of actually sending the request.
@@ -98,8 +98,8 @@ process
         $DeviceType = ( Find-DSCCDeviceTypeFromStorageSystemID -SystemId $SystemId )
         if ( $DeviceType )
             {   $MyAdd = 'storage-systems/' + $DeviceType + '/' + $SystemId + '/storage-pools'
-                invoke-DSCCrestmethod -UriAdd $MyAdd -method Get -whatifBoolean $WhatIf
-                $ReturnData = Invoke-RepackageObjectWithType -RawObject $SysColOnly -ObjectName "Pool.$DeviceType"
+                $SysColOnly = Invoke-DSCCRestMethod -UriAdd $MyAdd -method Get -whatifBoolean $WhatIf
+                $ReturnData = Invoke-RepackageObjectWithType -RawObject $SysColOnly -ObjectName "Pool.combined"
                 if ( $PoolId )
                         {   return ( $ReturnData | where-object { $_.id -eq $PoolId } )
                         } 
@@ -107,10 +107,9 @@ process
                         {   return $ReturnData
                         }
             }
-        return
     }       
 }   
-function Get-DSCCStoragePoolVolume
+function Get-DSCCPoolVolume
 {
 <#
 .SYNOPSIS
@@ -235,15 +234,17 @@ param(  [parameter(mandatory,ValueFromPipeLineByPropertyName=$true )][Alias('id'
 process
     {   Invoke-DSCCAutoReconnect
         $DeviceType = ( Find-DSCCDeviceTypeFromStorageSystemID -SystemId $SystemId )
-        Clear-Variable -Name ReturnData -ErrorAction SilentlyContinue
         if ( $DeviceType -eq 'device-type2')
                 {   Write-Warning "This command only operates against Device-Type1 Storage Devices."
+                    return 
                 }
             else 
                 {   $MyAdd = 'storage-systems/' + $SystemId + '/storage-pools/' + $PoolId + '/volumes'
-                    invoke-DSCCrestmethod -UriAdd $MyAdd -method Get -whatifBoolean $WhatIf
-                    $SysColOnly = (($SysColOnly).volumes).items
-                    $ReturnData = Invoke-RepackageObjectWithType -RawObject $SysColOnly -ObjectName "PoolVolume.$DeviceType"
+                    $SysColOnly = Invoke-DSCCRestMethod -UriAdd $MyAdd -method Get -WhatIfBoolean $WhatIf
+                    if ($SysColOnly)
+                        {   $SysColOnly = (($SysColOnly).volumes).items
+                            $ReturnData = Invoke-RepackageObjectWithType -RawObject $SysColOnly -ObjectName "PoolVolume.$DeviceType"
+                        }
                 }
         if ( $VolumeId )
                 {   Write-host "The results of the complete collection have been limited to just the supplied ID"

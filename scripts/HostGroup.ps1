@@ -98,21 +98,9 @@ param(  [string]    $HostGroupId,
      )
 process
     {   Invoke-DSCCAutoReconnect
-        $MyURI = $BaseURI + 'host-initiator-groups'
-        if ( $WhatIf )
-                {   $SysColOnly = invoke-restmethodWhatIf -uri $MyUri -headers $MyHeaders -method Get
-                }   
-            else 
-                {   $SysColOnly = invoke-restmethod -uri $MyUri -headers $MyHeaders -method Get
-                }
-        if ( ( $SysColOnly ).items )
-                {   $SysColOnly = $SysColOnly.items 
-                }
+        $MyAdd = 'host-initiator-groups'
+        $SysColOnly = invoke-restmethodWhatIf -uri $MyUri -method Get -WhatIfBoolean $WhatIf
         $ReturnData = Invoke-RepackageObjectWithType -RawObject $SysColOnly -ObjectName "HostGroup"
-        if ( ( $SysColOnly ).total -eq 0 )
-                {   Write-Warning "The Call to SystemID $SystemId returned no Disk Records."
-                    $ReturnData = ''                                                
-                }
         if ( $HostGroupID )
                 {   Write-host "The results of the complete collection have been limited to just the supplied ID"
                     return ( $ReturnData | where-object { $_.id -eq $HostGroupId } )
@@ -122,7 +110,6 @@ process
                 }
     }       
 }   
-
 function Remove-DSCCHostGroup
 {
 <#
@@ -167,16 +154,12 @@ param(  [Parameter(Mandatory)]  [string]    $HostGroupID,
      )
 process
     {   Invoke-DSCCAutoReconnect
-        $MyURI = $BaseURI + 'host-initiator-groups/' + $HostGroupID
+        $MyAdd = 'host-initiator-groups/' + $HostGroupID
+        $MyBody = ''
         if ( $Force )
-                {   $LocalBody += @{ force = $true }
+                {   $MyBody += ( @{ force = $true } | convertTo-json )
                 }
-        if ( $Whatif )
-                {   return Invoke-RestMethodWhatIf -Uri $MyUri -Method 'Delete' -headers $MyHeaders -body $LocalBody
-                } 
-            else 
-                {   return Invoke-RestMethod -uri $MyUri -Headers $MyHeaders -Method Delete -body $LocalBody
-                }
+        return Invoke-DSCCRestMethodWhat -UriAdd $MyAdd -Method 'Delete' -body $MyBody -WhatIfBoolean $WhatIf
     }       
 }   
 Function New-DSCCHostGroup
@@ -228,27 +211,22 @@ Function New-DSCCHostGroup
     }
 #>   
 [CmdletBinding()]
-param(                          [string]    $comment,
-                                            $hostIds,
-                                            $hostsToCreate,
-        [Parameter(Mandatory)]  [string]    $name,
-                                [boolean]   $userCreated=$true,
-                                [switch]    $WhatIf
+param(  [Parameter(Mandatory=$true)]    [string]    $name,
+                                        [string]    $comment,
+                                        [array]     $hostIds,
+                                        [array]     $hostsToCreate,
+                                        [boolean]   $userCreated=$true,
+                                        [switch]    $WhatIf
      )
 process
     {   Invoke-DSCCAutoReconnect
-        $MyURI = $BaseURI + 'host-initiator-groups'
-                                    $MyBody  = @{ name = $name }
-        if ($comment)           {   $MyBody += @{ comment = $comment }  }
-        if ($hostIds)           {   $MyBody += @{ hostIds = $hostIds }  }
-        if ($hostsToCreate )    {   $MyBody += @{ hostsToCreate = $hostsToCreate }  }
-                                    $MyBody += @{ userCreated = $userCreated }
-        if ($Whatif)
-                {   return Invoke-RestMethodWhatIf -uri $MyUri -method 'Put' -headers $MyHeaders -body $MyBody
-                } 
-            else 
-                {   return Invoke-RestMethod -uri $MyUri -method 'Put' -headers $MyHeaders -body $MyBody
-                }
+        $MyAdd = 'host-initiator-groups'
+                                    $MyBody  = [ordered]@{ name          = $name             }
+        if ($comment)           {   $MyBody +=          @{ comment       = $comment       }  }
+        if ($hostIds)           {   $MyBody +=          @{ hostIds       = $hostIds       }  }
+        if ($hostsToCreate )    {   $MyBody +=          @{ hostsToCreate = $hostsToCreate }  }
+                                    $MyBody +=          @{ userCreated   = $userCreated      }
+        return Invoke-DSCCRestMethod -UriAdd $MyAdd -method 'POST' -body $MyBody -WhatIfBoolen $WhatIf
      }      
 } 
 Function Set-DSCCHostGroup
@@ -280,24 +258,18 @@ Function Set-DSCCHostGroup
 #>   
 [CmdletBinding()]
 param(  [Parameter(Mandatory)]  [string]    $hostGroupID,
-                                [string]    $name,  
-                                            $hostsToCreate,
-                                            $updatedHosts,
+                                [string]    $name,
+                                [array]     $hostsToCreate,
+                                [array]     $updatedHosts,
                                 [switch]    $WhatIf
      )
 process
     {   Invoke-DSCCAutoReconnect
-        $MyURI = $BaseURI + 'host-initiator-groups/' + $hostGroupID
-                                    $MyBody += @{} 
-        if ($name)              {   $MyBody += @{ name = $name}  }
-        if ($updatedHosts)      {   $MyBody += @{ updatedHosts = $updatedHosts }  }
+        $MyAdd = 'host-initiator-groups/' + $hostGroupID
+                                    $MyBody += @{}
+        if ($name)              {   $MyBody += @{ name          = $name}  }
+        if ($updatedHosts)      {   $MyBody += @{ updatedHosts  = $updatedHosts }  }
         if ($updatedHosts)      {   $MyBody += @{ HostsToCreate = $hostsToCreate }  }
-        
-        if ($Whatif)
-                {   return Invoke-RestMethodWhatIf -uri $MyUri -Header $MyHeaders -body $MyBody -Method 'Put'
-                } 
-            else 
-                {   return Invoke-RestMethod -uri $MyUri -Header $MyHeaders -body $MyBody -Method 'Put'
-                }
+        return Invoke-DSCCRestMethod -UriAdd $MyAdd -body ( $MyBody | ConvertTo-Json ) -Method 'Put' -WhatIfBoolean $WhatIf
     }       
 } 

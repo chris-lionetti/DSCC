@@ -62,33 +62,136 @@ process
     {   Invoke-DSCCAutoReconnect
         $systemId = $( $systemId + $owned_by_group_id )
         $DeviceType = ( Find-DSCCDeviceTypeFromStorageSystemID -SystemId $systemId )
-        write-verbose "Dectected the DeviceType is $DeviceType"
-        $MyURI = $BaseURI + 'storage-systems/' + $DeviceType + '/' + $systemId + '/volumes/' + $Id + '/snapshots'
-        if ( $WhatIf )
-                {   $SysColOnly = invoke-restmethodWhatIf -uri $MyURI -headers $MyHeaders -method Get
-                }   
-            else 
-                {   try     {   $SysColOnly = invoke-restmethod -uri $MyURI -headers $MyHeaders -method Get
-                            }
-                    catch   {   Write-Warning "No Snapshots Detected on system ID $SystemId and Volume ID $Id."
-                                return
-                            }
-                }
-        if ( ($SysColOnly).items ) 
-                {   $SysColOnly = ($SysColOnly).items 
-                    $ReturnData = Invoke-RepackageObjectWithType -RawObject $SysColOnly -ObjectName "Snapshot.$DeviceType"
-                }
-            else 
-                {   if ( ($SysColOnly).Total -eq 0 )
-                            {   Write-Warning "No Snapshots Detected on system ID $SystemId and Volume ID $Id."
-                                return
-                            }
-                }
+        $MyAdd = 'storage-systems/' + $DeviceType + '/' + $systemId + '/volumes/' + $Id + '/snapshots'
+        $SysColOnly = Invoke-DSCCRestMethod -UriAdd $MyAdd -method Get -WhatIfBoolean $WhatIf
+        $ReturnData = Invoke-RepackageObjectWithType -RawObject $SysColOnly -ObjectName "Snapshot.$DeviceType"
         if ( $VolumeId )
                 {   return ( $ReturnData | where-object { $_.id -eq $VolumeId } )
                 } 
             else 
                 {   return $ReturnData
                 }
+    }       
+} 
+function Remove-DSCCSnapshot{
+<#
+.SYNOPSIS
+    Removes the HPE DSSC DOM Storage Systems Snapshots for a specific storage system and volume    
+.DESCRIPTION
+    Removes the HPE DSSC DOM Storage Systems Snapshots for a specific storage system and volume 
+.PARAMETER systemID
+    A single Storage System ID is specified and required, the pools defined will be returned unless a specific PoolID is requested.
+.PARAMETER volumeId
+    A single volume ID is specified and required.
+.PARAMETER snapshotId
+    A single snapshot ID is specified and required.
+.PARAMETER force
+    implemented as a switch, if triggered will cause the array to allow the deletion of a snapshot regardless of certain blocking factors
+    such as the snapshot being online.
+.PARAMETER WhatIf
+    The WhatIf directive will show you the RAW RestAPI call that would be made to DSCC instead of actually sending the request.
+    This option is very helpful when trying to understand the inner workings of the native RestAPI calls that DSCC uses.
+#>   
+[CmdletBinding()]
+param(  [Parameter(ValueFromPipeLineByPropertyName=$true,mandatory=$true )][Alias('owned_by_group_id')]     [string]    $systemId, 
+        [Parameter(ValueFromPipeLineByPropertyName=$true,mandatory=$true )][Alias('volumeId')]              [string]    $Id,
+        [Parameter(mandatory=$true)]                                                                        [string]    $snapshotId,
+                                                                                                            [switch]    $force,
+                                                                                                            [switch]    $WhatIf
+     )
+process
+    {       Invoke-DSCCAutoReconnect
+            $systemId = $( $systemId + $owned_by_group_id )
+            $DeviceType = ( Find-DSCCDeviceTypeFromStorageSystemID -SystemId $systemId )
+            $MyAdd = 'storage-systems/' + $DeviceType + '/' + $systemId + '/volumes/' + $Id + '/snapshots/' + $snapshotId 
+            if ( $force )   
+                {   $MyAdd = $MyAdd + '?force=true' 
+                }
+            return Invoke-DSCCRestMethod -UriAdd $MyAdd -method DELETE -WhatIfBoolean $WhatIf
+    }       
+} 
+    
+function New-DSCCSnapshot{
+<#
+.SYNOPSIS
+    Creates a DSSC DOM Storage Systems Snapshots for a specific storage system and volume    
+.DESCRIPTION
+    Creates a DSSC DOM Storage Systems Snapshots for a specific storage system and volume 
+.PARAMETER systemID
+    A single Storage System ID is specified and required, the pools defined will be returned unless a specific PoolID is requested.
+.PARAMETER Id
+    A single volume ID is specified and required.
+.PARAMETER name
+    This field is required for Systems that are of Device-Type2 (Nimble Storage or Alletra 6k, and is the name of the parameter
+.PARAMETER description
+    This field is is also known as the snapshot 'comment' and is used to describe the contents of the snapshot, or a comment on the 
+    process or cause or source of the snapshot. Any string can be used. 
+.PARAMETER writable
+    This is a boolean value and processed as a switch, this controls if the snapshot will be marked as a read-only snapshot, or if 
+    that snapshot is writable. This value can be set for either a device-type1 or device-typ2 type devices.
+.PARAMETER online
+    This is a boolean value is implemented as a switch; and is only valid for Device-type2 devices (Nimble Storage or Alletra 6K). 
+    This value should be set to true to allow the snapshot to be mounted and used by various backup software packages and is required
+    when using VSS controlled backups.
+.PARAMETER expireSecs
+    The number of seconds that a snapshot will remain until it is valid for use. i.e. How long until the snapshot expires.
+.PARAMETER retainSecs
+    The number of seconds that a snapshot will remain until it is valid for use. i.e. How long until the snapshot expires.
+.PARAMETER WhatIf
+    The WhatIf directive will show you the RAW RestAPI call that would be made to DSCC instead of actually sending the request.
+    This option is very helpful when trying to understand the inner workings of the native RestAPI calls that DSCC uses.
+#>   
+[CmdletBinding()]
+param(      [Parameter(ValueFromPipeLineByPropertyName=$true,mandatory=$true,ParameterSetName='devicetype1','device-type2')]
+            [Alias('owned_by_group_id')]                                                                                    [string]    $systemId, 
+            [Parameter(ValueFromPipeLineByPropertyName=$true,mandatory=$true,ParameterSetName='devicetype1')]
+            [Parameter(ValueFromPipeLineByPropertyName=$true,mandatory=$true,ParameterSetName='devicetype2')]
+            [Alias('volumeId', 'applicationSetId')]                                                                         [string]    $Id,
+
+            [Parameter(ParameterSetName='devicetype1','devicetype2')][Alias('customName')]                                  [string]    $name,
+            [Parameter(ParameterSetName='devicetype1','devicetype2')][Alias('comment')]                                     [string]    $description,            
+            [Parameter(ParameterSetName='devicetype1','devicetype2')][Alias('readonly')]                                    [switch]    $writable,
+            [Parameter(ParameterSetName='devicetype1',mandatory=$true)]
+            [ValidateSet('PARENT_TIMESTAMP','PARENT_SEC_SINCE_EPOCH','CUSTOM')]                                             [string]    $namePattern,
+            [Parameter(ParameterSetName='devicetype1')]                                                                     [int]       $expireSecs,
+            [Parameter(ParameterSetName='devicetype1')]                                                                     [int]       $retainSecs,
+            [Parameter(ParameterSetName='devicetype2')]                                                                     [string]    $app_uuid,
+            [Parameter(ParameterSetName='devicetype2')]                                                                     [switch]    $online,            
+                                                                                                                            [switch]    $WhatIf
+         )
+process
+    {       Invoke-DSCCAutoReconnect
+            $DeviceType = ( Find-DSCCDeviceTypeFromStorageSystemID -SystemId $systemId )
+            $MyURI = $BaseURI + 'storage-systems/' + $DeviceType + '/' + $systemId + '/volumes/' + $Id + '/snapshots'
+            switch ( $DeviceType )
+                {   'device-type1'  {   if ( Get-DSCCVolume -systemId $systemId -volumeid $id )
+                                                {   write-verbose "The ID given was for a valid Volume. Making a volume snapshot."
+                                                } 
+                                            elseif  ( Get-DSCCVolumeSet -systemId $systemId -volumeCollectionid $id )
+                                                {   write-verbose "The ID given was for a valid Application Set, so an Application Set snapshot will be run."
+                                                    $MyAdd = 'storage-systems/' + $DeviceType + '/' + $systemId + '/applicationsets/' + $Id + '/snapshots'
+                                                }
+                                            else
+                                                {   write-warning "The ID presented for the VolumeId or Application Set ID did not return a valid item. Cannot create snaphot."
+                                                    return
+                                                }
+                                                                    $MyBody =           @{ 'namePattern' = $namePattern } 
+                                        if ( $description )     {   $MyBody = $MyBody + @{ 'comment'     = $description } }
+                                        if ( $Name )            {   $MyBody = $MyBody + @{ 'customName'  = $name }        }
+                                        if ( $expireSecs )      {   $MyBody = $MyBody + @{ 'expireSecs'  = $expireSecs }  }
+                                        if ( $writeable )       {   $MyBody = $MyBody + @{ 'readOnly'    = $true }        }
+                                            else                {   $MyBody = $MyBody + @{ 'readOnly'    = $false }       }
+                                        if ( $retainSecs )      {   $MyBody = $MyBody + @{ 'retainSecs'  = $name }        }
+                                    }
+                    'device-type2'  {                               $MyBody + @{ 'name'  = $name } 
+                                        if ( $app_uuid )        {   $MyBody = $MyBody + @{ 'app_uuid'    = $app_uuid }    }
+                                        if ( $description )     {   $MyBody = $MyBody + @{ 'description' = $description } }
+                                        if ( $online )          {   $MyBody = $MyBody + @{ 'online'      = $true }        }
+                                            else                {   $MyBody = $MyBody + @{ 'online'      = $false }       }
+                                        if ( $writeable )       {   $MyBody = $MyBody + @{ 'readOnly'    = $true }        }
+                                            else                {   $MyBody = $MyBody + @{ 'readOnly'    = $false }       }
+                                    }
+                }
+            return Invoke-DSCCRestMethod -UriAdd $MyAdd -method POST -body $MyBody -whatifBoolean $WhatIf
     }       
 } 
